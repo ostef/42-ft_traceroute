@@ -7,12 +7,16 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 
 #include <unistd.h>
 #include <signal.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/time.h>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
@@ -22,20 +26,22 @@ typedef struct {
     char *dest_hostname_arg;
 
     int socket_fd;
+    int icmp_socket_fd;
     struct sockaddr_in dest_addr;
     char dest_addr_str[INET_ADDRSTRLEN];
     char dest_hostname[1024];
 
-    int max_hops;
+    struct timeval *send_times;
+
+    int first_ttl; // -f --first
+    int max_ttl; // -m --max-hops
+    int num_simultaneous_queries; // -N --sim-queries
+    int num_queries_per_hop; // -q --queries
+    int port; // -p --port
+    float max_wait_in_seconds; // -w --wait
+    float here_wait_in_seconds; // -w --wait
+    float near_wait_in_seconds; // -w --wait
 } Context;
-
-#define Ping_Packet_Size 64
-#define Num_Probes 3
-
-typedef struct __attribute((packed)) {
-    struct icmphdr header;
-    char msg[Ping_Packet_Size - sizeof(struct icmphdr)];
-} PingPacket;
 
 void FatalError(const char *message, ...);
 void FatalErrorErrno(const char *message, int err);
