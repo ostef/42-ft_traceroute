@@ -3,6 +3,21 @@
 // https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol
 // https://www.geeksforgeeks.org/ping-in-c/
 
+struct timeval SecondsDoubleToTimeval(double seconds) {
+    struct timeval time = {0};
+    time.tv_sec = (time_t)seconds;
+    time.tv_usec = (time_t)((seconds - (int)seconds) * 1000000);
+
+    return time;
+}
+
+double GetTime() {
+    struct timeval time = {0};
+    gettimeofday(&time, NULL);
+
+    return (double)time.tv_sec + time.tv_usec / 1000000.0;
+}
+
 void FatalError(const char *message, ...) {
     va_list va;
 
@@ -121,139 +136,40 @@ static void InitContext(Context *ctx) {
 
     freeaddrinfo(dest_addr_info);
 
-    ctx->send_times = malloc(sizeof(struct timeval) * ctx->num_simultaneous_queries);
-    memset(ctx->send_times, 0, sizeof(struct timeval) * ctx->num_simultaneous_queries);
+    ctx->hop_infos = malloc(sizeof(HopInfo) * ctx->num_simultaneous_queries);
+    memset(ctx->hop_infos, 0, sizeof(HopInfo) * ctx->num_simultaneous_queries);
+
+    ctx->ttl_num_digits = 1;
+    {
+        int x = ctx->max_ttl / 10;
+        while (x > 0) {
+            x /= 10;
+            ctx->ttl_num_digits += 1;
+        }
+    }
+
+    ctx->last_printed_query = -1;
 }
 
 static void DestroyContext(Context *ctx) {
     close(ctx->socket_fd);
     close(ctx->icmp_socket_fd);
-    free(ctx->send_times);
-}
-
-static void TraceRouteLoop(Context *ctx) {
-    char data[68];
-    int ttl_num_digits = 1;
-    {
-        int x = ctx->max_ttl / 10;
-        while (x > 0) {
-            x /= 10;
-            ttl_num_digits += 1;
-        }
-    }
-
-    int max_total_queries = ctx->num_queries_per_hop * (ctx->max_ttl - ctx->first_ttl);
-    int queries_sent = 0;
-    while (queries_sent < max_total_queries) {
-        int first_query = queries_sent;
-        int query = 0;
-        for (; queries_sent < max_total_queries && query < ctx->num_simultaneous_queries; query += 1) {
-            int query_of_hop = queries_sent % ctx->num_queries_per_hop;
-            int ttl = ctx->first_ttl + queries_sent / ctx->num_queries_per_hop;
-            if (query_of_hop == 0) {
-                if (setsockopt(ctx->socket_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0) {
-                    FatalErrorErrno("setsockopt(SO_REUSEADDR)", errno);
-                }
-            }
-
-            struct sockaddr_in dest_addr = ctx->dest_addr;
-            dest_addr.sin_port = htons(ctx->port + queries_sent);
-
-            gettimeofday(&ctx->send_times[query], NULL);
-
-            int sendto_result = sendto(ctx->socket_fd, data, sizeof(data), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-            if (sendto_result < 0 && errno != ECONNRESET) {
-                FatalErrorErrno("sendto", errno);
-            }
-
-            queries_sent += 1;
-        }
-
-        bool reached_dest = false;
-        struct sockaddr_in last_addr = {0};
-        for (int i = 0; i < query; i += 1) {
-            int query_of_hop = (first_query + i) % ctx->num_queries_per_hop;
-            int ttl = ctx->first_ttl + (first_query + i) / ctx->num_queries_per_hop;
-
-            if (query_of_hop == 0) {
-                last_addr = (struct sockaddr_in){0};
-                dprintf(STDOUT_FILENO, "%*d", ttl_num_digits, ttl);
-            }
-
-            fd_set read_fds;
-            FD_ZERO(&read_fds);
-            FD_SET(ctx->icmp_socket_fd, &read_fds);
-
-            struct timeval timeout = {0};
-            timeout.tv_sec = (time_t)ctx->max_wait_in_seconds;
-            timeout.tv_usec = (time_t)((ctx->max_wait_in_seconds - (int)ctx->max_wait_in_seconds) * 1000000);
-
-            int select_result = select(ctx->icmp_socket_fd + 1, &read_fds, NULL, NULL, &timeout);
-            if (select_result < 0) {
-                FatalErrorErrno("select", errno);
-            } else if (FD_ISSET(ctx->icmp_socket_fd, &read_fds)) {
-                struct sockaddr_in recv_addr = {0};
-                socklen_t addr_len = sizeof(recv_addr);
-
-                ssize_t received = recvfrom(ctx->icmp_socket_fd, data, sizeof(data), 0, (struct sockaddr *)&recv_addr, &addr_len);
-
-                if (recv_addr.sin_addr.s_addr == ctx->dest_addr.sin_addr.s_addr) {
-                    reached_dest = true;
-                }
-
-                if (received < 0) {
-                    if (errno == EHOSTUNREACH) {
-                        dprintf(STDOUT_FILENO, " * (no response)");
-                    } else {
-                        FatalErrorErrno("recvfrom", errno);
-                    }
-                } else if (received > 0) {
-                    struct timeval send_time = ctx->send_times[i];
-                    struct timeval recv_time = {0};
-                    gettimeofday(&recv_time, NULL);
-
-                    float round_trip_time = (recv_time.tv_sec - send_time.tv_sec) * 1000.0
-                        + (recv_time.tv_usec - send_time.tv_usec) / 1000.0;
-
-                    struct icmphdr *hdr = (struct icmphdr *)(data + sizeof(struct iphdr));
-
-                    if (last_addr.sin_addr.s_addr != recv_addr.sin_addr.s_addr) {
-						char *addr_str = inet_ntoa(recv_addr.sin_addr);
-                        dprintf(STDOUT_FILENO, " %s", addr_str);
-                        last_addr = recv_addr;
-                    }
-
-                    dprintf(STDOUT_FILENO, " %d %.3f ms", hdr->type, round_trip_time);
-                } else {
-                    dprintf(STDOUT_FILENO, " *");
-                }
-            } else {
-                dprintf(STDOUT_FILENO, " **");
-            }
-
-            if (query_of_hop == ctx->num_queries_per_hop - 1) {
-                dprintf(STDOUT_FILENO, "\n");
-                if (reached_dest) {
-                    return;
-                }
-            }
-        }
-    }
+    free(ctx->hop_infos);
 }
 
 int main(int argc, char **argv) {
     Context ctx = {0};
     ctx.first_ttl = 1;
     ctx.max_ttl = 30;
-    ctx.num_simultaneous_queries = 16;
+    ctx.num_simultaneous_queries = 1;
     ctx.num_queries_per_hop = 3;
-    ctx.port = 33333;
+    ctx.port = 33434;
     ctx.max_wait_in_seconds = 1;
     ctx.here_wait_in_seconds = 3;
     ctx.near_wait_in_seconds = 10;
 
     HandleProgramArguments(&ctx, argc, argv);
     InitContext(&ctx);
-    TraceRouteLoop(&ctx);
+    TraceRoute(&ctx);
     DestroyContext(&ctx);
 }

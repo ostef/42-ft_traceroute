@@ -1,6 +1,6 @@
 NAME=ft_traceroute
 SRC_DIR=Source
-SRC_FILES=main.c
+SRC_FILES=main.c traceroute.c
 OBJ_DIR=Obj
 OBJ_FILES=$(SRC_FILES:.c=.o)
 INCLUDE_DIRS=Source
