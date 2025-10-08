@@ -25,6 +25,7 @@
 
 typedef struct {
     bool received;
+    struct sockaddr_in recv_addr;
     double send_time;
     double recv_time;
 } HopInfo;
@@ -45,17 +46,21 @@ typedef struct {
     int total_queries_sent;
     int queries_sent_this_loop;
     int last_printed_query;
+    struct in_addr last_printed_addr;
+    uint16_t source_port;
 
     int ttl_num_digits;
     int first_ttl; // -f --first
     int max_ttl; // -m --max-hops
     int num_simultaneous_queries; // -N --sim-queries
     int num_queries_per_hop; // -q --queries
-    int port; // -p --port
+    uint16_t port; // -p --port
     float max_wait_in_seconds; // -w --wait
     float here_wait_in_seconds; // -w --wait
     float near_wait_in_seconds; // -w --wait
 } Context;
+
+#define Packet_Size 60
 
 struct timeval SecondsDoubleToTimeval(double seconds);
 double GetTime();
@@ -70,7 +75,6 @@ void PrintICMPPacket(Context *ctx, void *data, int size, double elapsed_ms);
 
 void SendProbe(Context *ctx);
 void ReceivePacket(Context *ctx, int hop);
-void PrintPacket(Context *ctx, int query_index, HopInfo *hop_info);
 bool ReachedFinalDestForHop(Context *ctx, int hop);
 
 void TraceRoute(Context *ctx);

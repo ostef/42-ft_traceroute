@@ -1,7 +1,7 @@
 #include "ft_traceroute.h"
 
 void SendProbe(Context *ctx) {
-    char buffer[1024] = {0};
+    char buffer[Packet_Size] = {0};
 
     int probe_in_hop = ctx->total_queries_sent % ctx->num_queries_per_hop;
     int hop = ctx->first_ttl + ctx->total_queries_sent / ctx->num_queries_per_hop;
@@ -26,22 +26,31 @@ void SendProbe(Context *ctx) {
     ctx->total_queries_sent += 1;
 }
 
-void PrintPacket(Context *ctx, int query_index, HopInfo *hop_info) {
+static void PrintPacket(Context *ctx, int query_index) {
     int probe = query_index % ctx->num_queries_per_hop;
     int hop = ctx->first_ttl + query_index / ctx->num_queries_per_hop;
+    HopInfo *hop_info = &ctx->hop_infos[query_index - ctx->first_query_this_loop];
 
     if (probe == 0) {
-        dprintf(STDOUT_FILENO, "%*d", ctx->ttl_num_digits, hop);
+        dprintf(STDOUT_FILENO, "%*d  ", ctx->ttl_num_digits, hop);
     }
 
     if (!hop_info->received) {
-        dprintf(STDOUT_FILENO, " *");
+        dprintf(STDOUT_FILENO, "* ");
     } else {
+        if (ctx->last_printed_addr.s_addr != hop_info->recv_addr.sin_addr.s_addr) {
+            char *addr_str = inet_ntoa(hop_info->recv_addr.sin_addr);
+            dprintf(STDOUT_FILENO, "%s ", addr_str);
+            hop_info->recv_addr.sin_addr.s_addr = ctx->last_printed_addr.s_addr;
+        }
+
         double round_trip_time = hop_info->recv_time - hop_info->send_time;
-        dprintf(STDOUT_FILENO, " %.3f ms", round_trip_time * 1000.0);
+        dprintf(STDOUT_FILENO, " %.3f ms ", round_trip_time * 1000.0);
     }
 
     if (probe == ctx->num_queries_per_hop - 1) {
+        ctx->last_printed_addr = (struct in_addr){};
+
         dprintf(STDOUT_FILENO, "\n");
 
         if (ctx->final_dest_hop == hop) {
@@ -59,7 +68,7 @@ static void PrintRemainingPackets(Context *ctx, bool all_packets) {
             break;
         }
 
-        PrintPacket(ctx, i, hop_info);
+        PrintPacket(ctx, i);
     }
 }
 
@@ -90,15 +99,19 @@ void ReceivePacket(Context *ctx, int i) {
             struct iphdr *original_ip = (struct iphdr *)(icmp + 1);
             struct udphdr *original_udp = (struct udphdr *)(original_ip + 1);
 
-            int recv_port = ntohs(original_udp->uh_dport);
-            int recv_query = recv_port - ctx->port;
-            int recv_index = recv_query - ctx->first_query_this_loop;
-            if (recv_index >= 0 && recv_index < ctx->queries_sent_this_loop) {
-                ctx->hop_infos[recv_index].received = true;
-                ctx->hop_infos[recv_index].recv_time = GetTime();
+            uint16_t source_port = ntohs(original_udp->uh_sport);
+            if (source_port == ctx->source_port) {
+                int recv_port = ntohs(original_udp->uh_dport);
+                int recv_query = recv_port - ctx->port;
+                int recv_index = recv_query - ctx->first_query_this_loop;
+                if (recv_index >= 0 && recv_index < ctx->queries_sent_this_loop) {
+                    ctx->hop_infos[recv_index].received = true;
+                    ctx->hop_infos[recv_index].recv_addr = recv_addr;
+                    ctx->hop_infos[recv_index].recv_time = GetTime();
 
-                if (ctx->final_dest_hop == 0 && recv_addr.sin_addr.s_addr == ctx->dest_addr.sin_addr.s_addr) {
-                    ctx->final_dest_hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
+                    if (ctx->final_dest_hop == 0 && recv_addr.sin_addr.s_addr == ctx->dest_addr.sin_addr.s_addr) {
+                        ctx->final_dest_hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
+                    }
                 }
             }
         }
@@ -106,6 +119,8 @@ void ReceivePacket(Context *ctx, int i) {
 }
 
 void TraceRoute(Context *ctx) {
+    dprintf(STDOUT_FILENO, "traceroute to %s (%s), %d hops max, %d bytes packets\n", ctx->dest_hostname_arg, ctx->dest_addr_str, ctx->max_ttl, Packet_Size);
+
     int max_total_queries = ctx->num_queries_per_hop * (ctx->max_ttl - ctx->first_ttl);
     while (ctx->total_queries_sent < max_total_queries) {
         memset(ctx->hop_infos, 0, sizeof(HopInfo) * ctx->num_simultaneous_queries);

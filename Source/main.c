@@ -74,6 +74,13 @@ static void InitContext(Context *ctx) {
         FatalErrorErrno("socket(UDP)", errno);
     }
 
+    ctx->source_port = (getpid() & 0xffff) | (1U << 15);
+
+    struct sockaddr_in source_addr = {0};
+    source_addr.sin_family = AF_INET;
+    source_addr.sin_port = htons(ctx->source_port);
+    bind(ctx->socket_fd, (struct sockaddr *)&source_addr, sizeof(source_addr));
+
     int reuseaddr = 1;
     if (setsockopt(ctx->socket_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(int)) < 0) {
         FatalErrorErrno("setsockopt(UDP, SO_REUSEADDR)", errno);
