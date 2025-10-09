@@ -40,12 +40,12 @@ static void PrintPacket(Context *ctx, int query_index) {
     } else {
         if (ctx->last_printed_addr.s_addr != hop_info->recv_addr.sin_addr.s_addr) {
             char *addr_str = inet_ntoa(hop_info->recv_addr.sin_addr);
-            dprintf(STDOUT_FILENO, "%s ", addr_str);
-            hop_info->recv_addr.sin_addr.s_addr = ctx->last_printed_addr.s_addr;
+            dprintf(STDOUT_FILENO, "(%s) ", addr_str);
+            ctx->last_printed_addr.s_addr = hop_info->recv_addr.sin_addr.s_addr;
         }
 
         double round_trip_time = hop_info->recv_time - hop_info->send_time;
-        dprintf(STDOUT_FILENO, " %.3f ms ", round_trip_time * 1000.0);
+        dprintf(STDOUT_FILENO, "%.3f ms ", round_trip_time * 1000.0);
     }
 
     if (probe == ctx->num_queries_per_hop - 1) {

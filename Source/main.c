@@ -128,9 +128,8 @@ static void InitContext(Context *ctx) {
         FatalError("Expected an IPV4 address");
     }
 
-    if (!inet_ntop(AF_INET, &dest_addr_info->ai_addr, ctx->dest_addr_str, sizeof(ctx->dest_addr_str))) {
-        FatalErrorErrno("inet_ntop", errno);
-    }
+    char *dest_addr_str = inet_ntoa(((struct sockaddr_in *)dest_addr_info->ai_addr)->sin_addr);
+    strcpy(ctx->dest_addr_str, dest_addr_str);
 
     memcpy(&ctx->dest_addr, dest_addr_info->ai_addr, sizeof(ctx->dest_addr));
 
