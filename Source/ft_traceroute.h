@@ -73,10 +73,6 @@ void FatalError(const char *message, ...);
 void FatalErrorErrno(const char *message, int err);
 void FatalErrorEAI(const char *message, int err);
 
-int SendICMPEchoPacket(Context *ctx, int ttl);
-int ReceiveICMPPacket(Context *ctx, void *buff, int size);
-void PrintICMPPacket(Context *ctx, void *data, int size, double elapsed_ms);
-
 void SendProbe(Context *ctx);
 void ReceivePacket(Context *ctx);
 bool ReachedFinalDestForHop(Context *ctx, int hop);
