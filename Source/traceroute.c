@@ -15,7 +15,7 @@ void SendProbe(Context *ctx) {
     struct sockaddr_in dest_addr = ctx->dest_addr;
     dest_addr.sin_port = htons(ctx->port + ctx->total_queries_sent);
 
-    ctx->hop_infos[ctx->queries_sent_this_loop].send_time = GetTime();
+    ctx->probe_infos[ctx->total_queries_sent].send_time = GetTime();
 
     int sendto_result = sendto(ctx->socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
     if (sendto_result < 0) {
@@ -29,22 +29,22 @@ void SendProbe(Context *ctx) {
 static void PrintPacket(Context *ctx, int query_index) {
     int probe = query_index % ctx->num_queries_per_hop;
     int hop = ctx->first_ttl + query_index / ctx->num_queries_per_hop;
-    HopInfo *hop_info = &ctx->hop_infos[query_index - ctx->first_query_this_loop];
+    ProbeInfo *probe_info = &ctx->probe_infos[query_index];
 
     if (probe == 0) {
         dprintf(STDOUT_FILENO, "%*d  ", ctx->ttl_num_digits, hop);
     }
 
-    if (!hop_info->received) {
+    if (!probe_info->received) {
         dprintf(STDOUT_FILENO, "* ");
     } else {
-        if (ctx->last_printed_addr.s_addr != hop_info->recv_addr.sin_addr.s_addr) {
-            char *addr_str = inet_ntoa(hop_info->recv_addr.sin_addr);
+        if (ctx->last_printed_addr.s_addr != probe_info->recv_addr.sin_addr.s_addr) {
+            char *addr_str = inet_ntoa(probe_info->recv_addr.sin_addr);
             dprintf(STDOUT_FILENO, "%s (%s) ", addr_str, addr_str);
-            ctx->last_printed_addr.s_addr = hop_info->recv_addr.sin_addr.s_addr;
+            ctx->last_printed_addr.s_addr = probe_info->recv_addr.sin_addr.s_addr;
         }
 
-        double round_trip_time = hop_info->recv_time - hop_info->send_time;
+        double round_trip_time = probe_info->recv_time - probe_info->send_time;
         dprintf(STDOUT_FILENO, "%.3f ms ", round_trip_time * 1000.0);
     }
 
@@ -63,8 +63,8 @@ static void PrintPacket(Context *ctx, int query_index) {
 
 static void PrintRemainingPackets(Context *ctx, bool all_packets) {
     for (int i = ctx->last_printed_query + 1; i < ctx->first_query_this_loop + ctx->queries_sent_this_loop; i += 1) {
-        HopInfo *hop_info = &ctx->hop_infos[i - ctx->first_query_this_loop];
-        if (!all_packets && !hop_info->received) {
+        ProbeInfo *probe_info = &ctx->probe_infos[i];
+        if (!all_packets && !probe_info->received) {
             break;
         }
 
@@ -72,17 +72,17 @@ static void PrintRemainingPackets(Context *ctx, bool all_packets) {
     }
 }
 
-void ReceivePacket(Context *ctx) {
+static bool WaitForPacket(Context *ctx) {
     fd_set read_fds;
+
     FD_ZERO(&read_fds);
     FD_SET(ctx->icmp_socket_fd, &read_fds);
 
     double timeout_seconds = ctx->max_wait_in_seconds - (GetTime() - ctx->receive_start_time);
     if (timeout_seconds <= 0) {
-        return;
+        return false;
     }
 
-    // dprintf(STDOUT_FILENO, "timeout=%.3f ", timeout_seconds);
     struct timeval timeout = SecondsDoubleToTimeval(timeout_seconds);
 
     int select_result = select(ctx->icmp_socket_fd + 1, &read_fds, NULL, NULL, &timeout);
@@ -91,6 +91,14 @@ void ReceivePacket(Context *ctx) {
     }
 
     if (!FD_ISSET(ctx->icmp_socket_fd, &read_fds)) {
+        return false;
+    }
+
+    return true;
+}
+
+void ReceivePacket(Context *ctx) {
+    if (!WaitForPacket(ctx)) {
         return;
     }
 
@@ -129,19 +137,21 @@ void ReceivePacket(Context *ctx) {
         return;
     }
 
-    ctx->hop_infos[recv_index].icmp_type = icmp->type;
-    ctx->hop_infos[recv_index].received = true;
-    ctx->hop_infos[recv_index].recv_addr = recv_addr;
-    ctx->hop_infos[recv_index].recv_time = GetTime();
+    ctx->probe_infos[recv_query].icmp_type = icmp->type;
+    ctx->probe_infos[recv_query].received = true;
+    ctx->probe_infos[recv_query].recv_addr = recv_addr;
+    ctx->probe_infos[recv_query].recv_time = GetTime();
+
+    int hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
 
     if (ctx->final_dest_hop == 0 && icmp->type == ICMP_DEST_UNREACH) {
-        ctx->final_dest_hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
+        ctx->final_dest_hop = hop;
     }
 }
 
 static bool ReceivedAllPackets(Context *ctx) {
     for (int i = 0; i < ctx->queries_sent_this_loop; i += 1) {
-        if (!ctx->hop_infos[i].received) {
+        if (!ctx->probe_infos[ctx->first_query_this_loop + i].received) {
             return false;
         }
     }
@@ -154,8 +164,6 @@ void TraceRoute(Context *ctx) {
 
     int max_total_queries = ctx->num_queries_per_hop * (ctx->max_ttl - ctx->first_ttl);
     while (ctx->total_queries_sent < max_total_queries) {
-        memset(ctx->hop_infos, 0, sizeof(HopInfo) * ctx->num_simultaneous_queries);
-
         ctx->first_query_this_loop = ctx->total_queries_sent;
         ctx->queries_sent_this_loop = 0;
 

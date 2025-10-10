@@ -146,8 +146,8 @@ static void InitContext(Context *ctx) {
 
     freeaddrinfo(dest_addr_info);
 
-    ctx->hop_infos = malloc(sizeof(HopInfo) * ctx->num_simultaneous_queries);
-    memset(ctx->hop_infos, 0, sizeof(HopInfo) * ctx->num_simultaneous_queries);
+    ctx->probe_infos = malloc(sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl) * ctx->num_queries_per_hop);
+    memset(ctx->probe_infos, 0, sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl) * ctx->num_queries_per_hop);
 
     ctx->ttl_num_digits = 1;
     {
@@ -164,7 +164,7 @@ static void InitContext(Context *ctx) {
 static void DestroyContext(Context *ctx) {
     close(ctx->socket_fd);
     close(ctx->icmp_socket_fd);
-    free(ctx->hop_infos);
+    free(ctx->probe_infos);
 }
 
 int main(int argc, char **argv) {
@@ -174,9 +174,7 @@ int main(int argc, char **argv) {
     ctx.num_simultaneous_queries = 16;
     ctx.num_queries_per_hop = 3;
     ctx.port = 33434;
-    ctx.max_wait_in_seconds = 5;
-    ctx.here_wait_in_seconds = 3;
-    ctx.near_wait_in_seconds = 10;
+    ctx.max_wait_in_seconds = 1;
 
     HandleProgramArguments(&ctx, argc, argv);
     InitContext(&ctx);

@@ -30,7 +30,7 @@ typedef struct {
     struct sockaddr_in recv_addr;
     double send_time;
     double recv_time;
-} HopInfo;
+} ProbeInfo;
 
 typedef struct {
     char *dest_hostname_arg;
@@ -41,12 +41,12 @@ typedef struct {
     char dest_addr_str[INET_ADDRSTRLEN];
     char dest_hostname[1024];
 
-    HopInfo *hop_infos;
-    int final_dest_hop;
+    ProbeInfo *probe_infos;
 
     int first_query_this_loop;
     int total_queries_sent;
     int queries_sent_this_loop;
+    int final_dest_hop;
     int last_printed_query;
     struct in_addr last_printed_addr;
     uint16_t source_port;
@@ -59,8 +59,6 @@ typedef struct {
     int num_queries_per_hop; // -q --queries
     uint16_t port; // -p --port
     float max_wait_in_seconds; // -w --wait
-    float here_wait_in_seconds; // -w --wait
-    float near_wait_in_seconds; // -w --wait
 } Context;
 
 #define Packet_Size 60
