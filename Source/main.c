@@ -11,11 +11,15 @@ struct timeval SecondsDoubleToTimeval(double seconds) {
     return time;
 }
 
+double TimevalToSecondsDouble(struct timeval time) {
+    return (double)time.tv_sec + time.tv_usec / 1000000.0;
+}
+
 double GetTime() {
     struct timeval time = {0};
     gettimeofday(&time, NULL);
 
-    return (double)time.tv_sec + time.tv_usec / 1000000.0;
+    return TimevalToSecondsDouble(time);
 }
 
 void FatalError(const char *message, ...) {
@@ -167,10 +171,10 @@ int main(int argc, char **argv) {
     Context ctx = {0};
     ctx.first_ttl = 1;
     ctx.max_ttl = 30;
-    ctx.num_simultaneous_queries = 1;
+    ctx.num_simultaneous_queries = 16;
     ctx.num_queries_per_hop = 3;
     ctx.port = 33434;
-    ctx.max_wait_in_seconds = 1;
+    ctx.max_wait_in_seconds = 5;
     ctx.here_wait_in_seconds = 3;
     ctx.near_wait_in_seconds = 10;
 

@@ -40,7 +40,7 @@ static void PrintPacket(Context *ctx, int query_index) {
     } else {
         if (ctx->last_printed_addr.s_addr != hop_info->recv_addr.sin_addr.s_addr) {
             char *addr_str = inet_ntoa(hop_info->recv_addr.sin_addr);
-            dprintf(STDOUT_FILENO, "(%s) ", addr_str);
+            dprintf(STDOUT_FILENO, "%s (%s) ", addr_str, addr_str);
             ctx->last_printed_addr.s_addr = hop_info->recv_addr.sin_addr.s_addr;
         }
 
@@ -72,50 +72,81 @@ static void PrintRemainingPackets(Context *ctx, bool all_packets) {
     }
 }
 
-void ReceivePacket(Context *ctx, int i) {
-    int query_index = ctx->first_query_this_loop + i;
-
+void ReceivePacket(Context *ctx) {
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(ctx->icmp_socket_fd, &read_fds);
 
-    struct timeval timeout = SecondsDoubleToTimeval(ctx->max_wait_in_seconds);
+    double timeout_seconds = ctx->max_wait_in_seconds - (GetTime() - ctx->receive_start_time);
+    if (timeout_seconds <= 0) {
+        return;
+    }
+
+    // dprintf(STDOUT_FILENO, "timeout=%.3f ", timeout_seconds);
+    struct timeval timeout = SecondsDoubleToTimeval(timeout_seconds);
 
     int select_result = select(ctx->icmp_socket_fd + 1, &read_fds, NULL, NULL, &timeout);
     if (select_result < 0) {
         FatalErrorErrno("select", errno);
     }
 
-    if (FD_ISSET(ctx->icmp_socket_fd, &read_fds)) {
-        char buffer[1024];
+    if (!FD_ISSET(ctx->icmp_socket_fd, &read_fds)) {
+        return;
+    }
 
-        struct sockaddr_in recv_addr = {0};
-        socklen_t addr_len = sizeof(recv_addr);
+    char buffer[1024];
 
-        ssize_t received = recvfrom(ctx->icmp_socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&recv_addr, &addr_len);
+    struct sockaddr_in recv_addr = {0};
+    socklen_t addr_len = sizeof(recv_addr);
 
-        if (received > 0) {
-            struct icmphdr *icmp = (struct icmphdr *)(buffer + sizeof(struct iphdr));
-            struct iphdr *original_ip = (struct iphdr *)(icmp + 1);
-            struct udphdr *original_udp = (struct udphdr *)(original_ip + 1);
+    ssize_t received = recvfrom(ctx->icmp_socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&recv_addr, &addr_len);
 
-            uint16_t source_port = ntohs(original_udp->uh_sport);
-            if (source_port == ctx->source_port) {
-                int recv_port = ntohs(original_udp->uh_dport);
-                int recv_query = recv_port - ctx->port;
-                int recv_index = recv_query - ctx->first_query_this_loop;
-                if (recv_index >= 0 && recv_index < ctx->queries_sent_this_loop) {
-                    ctx->hop_infos[recv_index].received = true;
-                    ctx->hop_infos[recv_index].recv_addr = recv_addr;
-                    ctx->hop_infos[recv_index].recv_time = GetTime();
+    if (received <= 0) {
+        return;
+    }
 
-                    if (ctx->final_dest_hop == 0 && recv_addr.sin_addr.s_addr == ctx->dest_addr.sin_addr.s_addr) {
-                        ctx->final_dest_hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
-                    }
-                }
-            }
+    struct icmphdr *icmp = (struct icmphdr *)(buffer + sizeof(struct iphdr));
+    if (icmp->type != ICMP_TIME_EXCEEDED && icmp->type != ICMP_DEST_UNREACH) {
+        return;
+    }
+
+    struct iphdr *original_ip = (struct iphdr *)(icmp + 1);
+    if (original_ip->protocol != IPPROTO_UDP) {
+        return;
+    }
+
+    struct udphdr *original_udp = (struct udphdr *)(original_ip + 1);
+
+    uint16_t source_port = ntohs(original_udp->uh_sport);
+    if (source_port != ctx->source_port) {
+        return;
+    }
+
+    int recv_port = ntohs(original_udp->uh_dport);
+    int recv_query = recv_port - ctx->port;
+    int recv_index = recv_query - ctx->first_query_this_loop;
+    if (recv_index < 0 || recv_index >= ctx->queries_sent_this_loop) {
+        return;
+    }
+
+    ctx->hop_infos[recv_index].icmp_type = icmp->type;
+    ctx->hop_infos[recv_index].received = true;
+    ctx->hop_infos[recv_index].recv_addr = recv_addr;
+    ctx->hop_infos[recv_index].recv_time = GetTime();
+
+    if (ctx->final_dest_hop == 0 && icmp->type == ICMP_DEST_UNREACH) {
+        ctx->final_dest_hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
+    }
+}
+
+static bool ReceivedAllPackets(Context *ctx) {
+    for (int i = 0; i < ctx->queries_sent_this_loop; i += 1) {
+        if (!ctx->hop_infos[i].received) {
+            return false;
         }
     }
+
+    return true;
 }
 
 void TraceRoute(Context *ctx) {
@@ -132,8 +163,10 @@ void TraceRoute(Context *ctx) {
             SendProbe(ctx);
         }
 
-        for (int i = 0; i < ctx->queries_sent_this_loop; i += 1) {
-            ReceivePacket(ctx, i);
+        ctx->receive_start_time = GetTime();
+
+        while (!ReceivedAllPackets(ctx) && GetTime() < ctx->receive_start_time + ctx->max_wait_in_seconds) {
+            ReceivePacket(ctx);
             PrintRemainingPackets(ctx, false);
         }
 

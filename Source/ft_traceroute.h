@@ -20,11 +20,13 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <netdb.h>
 
 typedef struct {
     bool received;
+    uint8_t icmp_type;
     struct sockaddr_in recv_addr;
     double send_time;
     double recv_time;
@@ -48,6 +50,7 @@ typedef struct {
     int last_printed_query;
     struct in_addr last_printed_addr;
     uint16_t source_port;
+    double receive_start_time;
 
     int ttl_num_digits;
     int first_ttl; // -f --first
@@ -63,6 +66,7 @@ typedef struct {
 #define Packet_Size 60
 
 struct timeval SecondsDoubleToTimeval(double seconds);
+double TimevalToSecondsDouble(struct timeval time);
 double GetTime();
 
 void FatalError(const char *message, ...);
@@ -74,7 +78,7 @@ int ReceiveICMPPacket(Context *ctx, void *buff, int size);
 void PrintICMPPacket(Context *ctx, void *data, int size, double elapsed_ms);
 
 void SendProbe(Context *ctx);
-void ReceivePacket(Context *ctx, int hop);
+void ReceivePacket(Context *ctx);
 bool ReachedFinalDestForHop(Context *ctx, int hop);
 
 void TraceRoute(Context *ctx);
