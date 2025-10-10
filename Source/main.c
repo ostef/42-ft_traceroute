@@ -48,6 +48,7 @@ static void PrintUsage() {
     fprintf(stderr, "Usage\n");
     fprintf(stderr, "  ft_traceroute [options*] <destination>\n\n");
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --help\t\t\tShow this help message\n");
     fprintf(stderr, "  -f <first_ttl>\t\tStart from the <first_ttl> hop (default is 1)\n");
     fprintf(stderr, "  -m <max_ttl>\t\t\tSet the maximum ttl (default is 30)\n");
     fprintf(stderr, "  -N <sim_queries>\t\tSet the number of simultaneous probes sent (default is 16)\n");
