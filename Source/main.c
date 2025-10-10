@@ -146,8 +146,8 @@ static void InitContext(Context *ctx) {
 
     freeaddrinfo(dest_addr_info);
 
-    ctx->probe_infos = malloc(sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl) * ctx->num_queries_per_hop);
-    memset(ctx->probe_infos, 0, sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl) * ctx->num_queries_per_hop);
+    ctx->probe_infos = malloc(sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl + 1) * ctx->num_queries_per_hop);
+    memset(ctx->probe_infos, 0, sizeof(ProbeInfo) * (ctx->max_ttl - ctx->first_ttl + 1) * ctx->num_queries_per_hop);
 
     ctx->ttl_num_digits = 1;
     {

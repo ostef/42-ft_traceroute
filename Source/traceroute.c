@@ -162,7 +162,7 @@ static bool ReceivedAllPackets(Context *ctx) {
 void TraceRoute(Context *ctx) {
     dprintf(STDOUT_FILENO, "traceroute to %s (%s), %d hops max, %d bytes packets\n", ctx->dest_hostname_arg, ctx->dest_addr_str, ctx->max_ttl, Packet_Size);
 
-    int max_total_queries = ctx->num_queries_per_hop * (ctx->max_ttl - ctx->first_ttl);
+    int max_total_queries = ctx->num_queries_per_hop * (ctx->max_ttl - ctx->first_ttl + 1);
     while (ctx->total_queries_sent < max_total_queries) {
         ctx->first_query_this_loop = ctx->total_queries_sent;
         ctx->queries_sent_this_loop = 0;
