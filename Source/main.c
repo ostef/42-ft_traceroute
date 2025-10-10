@@ -46,24 +46,109 @@ void FatalErrorEAI(const char *message, int err) {
 
 static void PrintUsage() {
     fprintf(stderr, "Usage\n");
-    fprintf(stderr, "  ft_traceroute <destination>\n\n");
+    fprintf(stderr, "  ft_traceroute [options*] <destination>\n\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  <destination>\t\tDNS name or IP address\n");
+    fprintf(stderr, "  -f <first_ttl>\t\tStart from the <first_ttl> hop (default is 1)\n");
+    fprintf(stderr, "  -m <max_ttl>\t\t\tSet the maximum ttl (default is 30)\n");
+    fprintf(stderr, "  -N <sim_queries>\t\tSet the number of simultaneous probes sent (default is 16)\n");
+    fprintf(stderr, "  -q <num_probes>\t\tSet the number of probes to send per hop (default is 3)\n");
+    fprintf(stderr, "  -w <max_wait>\t\t\tWait at most <max_wait> seconds for all pending packets to receive (default is 1 second)\n");
+}
+
+static long ParseInt(char *str) {
+    char *end = str + strlen(str);
+    long value = strtol(str, &end, 10);
+    if (end != str + strlen(str)) {
+        FatalError("Expected an integer (got '%s')", str);
+    }
+
+    return value;
+}
+
+static float ParseFloat(char *str) {
+    char *end = str + strlen(str);
+    float value = strtof(str, &end);
+    if (end != str + strlen(str)) {
+        FatalError("Expected a floating point value (got '%s')", str);
+    }
+
+    return value;
 }
 
 static void HandleProgramArguments(Context *ctx, int argc, char **argv) {
     char option = 0;
     for (int i = 1; i < argc; i += 1) {
+        switch (option) {
+        case 0:
+            break;
+        case 'f':
+            ctx->first_ttl = ParseInt(argv[i]);
+            if (ctx->first_ttl < 1) {
+                FatalError("Invalid value for -f option (expected an integer >1)");
+            }
+            break;
+        case 'm':
+            ctx->max_ttl = ParseInt(argv[i]);
+            if (ctx->max_ttl < 1) {
+                FatalError("Invalid value for -m option (expected an integer >1)");
+            }
+            break;
+        case 'N':
+            ctx->num_simultaneous_queries = ParseInt(argv[i]);
+            if (ctx->num_simultaneous_queries < 1) {
+                FatalError("Invalid value for -N option (expected an integer >1)");
+            }
+            break;
+        case 'q':
+            ctx->num_queries_per_hop = ParseInt(argv[i]);
+            if (ctx->num_queries_per_hop < 1) {
+                FatalError("Invalid value for -q option (expected an integer >1)");
+            }
+            break;
+        case 'p':
+            long port = ParseInt(argv[i]);
+            if (port < 0 || port > 0xffff) {
+                FatalError("Invalid value for -p option (expected an unsigned 16 bit integer)");
+            }
+            ctx->port = (uint16_t)port;
+            break;
+        case 'w':
+            ctx->max_wait_in_seconds = ParseFloat(argv[i]);
+            if (ctx->max_wait_in_seconds <= 0) {
+                FatalError("Invalid value for -w option (expected a positive floating point value)");
+            }
+            break;
+        default:
+            FatalError("Unknown option '%c'", option);
+            break;
+        }
+
+        if (option != 0) {
+            option = 0;
+            continue;
+        }
+
         if (strcmp(argv[i], "--help") == 0) {
             PrintUsage();
             exit(0);
         } else if (argv[i][0] == '-') {
-            FatalError("Unknown option '%s'", argv[i]);
+            option = argv[i][1];
+            if (argv[i][1] == 0 || argv[i][2] != 0) {
+                FatalError("Unknown option '%s'", argv[i]);
+            }
         } else if (ctx->dest_hostname_arg) {
             FatalError("Only one destination address should be provided");
         } else {
             ctx->dest_hostname_arg = argv[i];
         }
+    }
+
+    if (option != 0) {
+        FatalError("No argument provided for option '%c'", option);
+    }
+
+    if (ctx->max_ttl < ctx->first_ttl) {
+        FatalError("Invalid value for -m option (must be >= first ttl of %d)", ctx->first_ttl);
     }
 
     if (!ctx->dest_hostname_arg) {
