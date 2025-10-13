@@ -80,48 +80,47 @@ static void HandleProgramArguments(Context *ctx, int argc, char **argv) {
     char option = 0;
     for (int i = 1; i < argc; i += 1) {
         switch (option) {
-        case 0:
-            break;
-        case 'f':
+        case 0: break;
+        case 'f': {
             ctx->first_ttl = ParseInt(argv[i]);
             if (ctx->first_ttl < 1) {
                 FatalError("Invalid value for -f option (expected an integer >1)");
             }
-            break;
-        case 'm':
+        } break;
+        case 'm': {
             ctx->max_ttl = ParseInt(argv[i]);
             if (ctx->max_ttl < 1) {
                 FatalError("Invalid value for -m option (expected an integer >1)");
             }
-            break;
-        case 'N':
+        } break;
+        case 'N': {
             ctx->num_simultaneous_queries = ParseInt(argv[i]);
             if (ctx->num_simultaneous_queries < 1) {
                 FatalError("Invalid value for -N option (expected an integer >1)");
             }
-            break;
-        case 'q':
+        } break;
+        case 'q': {
             ctx->num_queries_per_hop = ParseInt(argv[i]);
             if (ctx->num_queries_per_hop < 1) {
                 FatalError("Invalid value for -q option (expected an integer >1)");
             }
-            break;
-        case 'p':
+        } break;
+        case 'p': {
             long port = ParseInt(argv[i]);
             if (port < 0 || port > 0xffff) {
                 FatalError("Invalid value for -p option (expected an unsigned 16 bit integer)");
             }
             ctx->port = (uint16_t)port;
-            break;
-        case 'w':
+        } break;
+        case 'w': {
             ctx->max_wait_in_seconds = ParseFloat(argv[i]);
             if (ctx->max_wait_in_seconds <= 0) {
                 FatalError("Invalid value for -w option (expected a positive floating point value)");
             }
-            break;
-        default:
+        } break;
+        default: {
             FatalError("Unknown option '%c'", option);
-            break;
+        } break;
         }
 
         if (option != 0) {
