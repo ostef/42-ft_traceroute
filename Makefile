@@ -25,4 +25,10 @@ fclean: clean
 
 re: fclean all
 
+build-container:
+	docker build -t ft_traceroute .
+
+run-container: build-container
+	docker run -v .:/var/42-ft_traceroute ft_traceroute
+
 .PHONY: all clean fclean re
