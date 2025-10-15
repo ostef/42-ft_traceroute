@@ -150,12 +150,10 @@ void ReceivePacket(Context *ctx) {
 
     if (ctx->probe_infos[recv_query].received) {
         if (ctx->probe_infos[recv_query].recv_addr.sin_addr.s_addr != recv_addr.sin_addr.s_addr) {
-            char *a = strdup(inet_ntoa(ctx->probe_infos[recv_query].recv_addr.sin_addr));
-            char *b = strdup(inet_ntoa(recv_addr.sin_addr));
-            Dbg("BADBAD %s != %s\n", a, b);
+            Dbg("Already received: %s != %s\n", strdup(inet_ntoa(ctx->probe_infos[recv_query].recv_addr.sin_addr)), strdup(inet_ntoa(recv_addr.sin_addr)));
+        } else {
+            Dbg("Already received\n");
         }
-
-        Dbg("Already received\n");
     } else {
         ctx->probe_infos[recv_query].icmp_type = icmp->type;
         ctx->probe_infos[recv_query].received = true;
