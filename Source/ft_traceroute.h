@@ -24,6 +24,9 @@
 #include <netinet/udp.h>
 #include <netdb.h>
 
+// #define Dbg(...) dprintf(STDOUT_FILENO, __VA_ARGS__)
+#define Dbg(...)
+
 typedef struct {
     bool received;
     uint8_t icmp_type;

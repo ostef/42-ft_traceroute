@@ -17,8 +17,9 @@ void SendProbe(Context *ctx) {
 
     ctx->probe_infos[ctx->total_queries_sent].send_time = GetTime();
 
+    Dbg("SendProbe:%d(%d) %u\n", hop, probe_in_hop, dest_addr.sin_port);
     int sendto_result = sendto(ctx->socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-    if (sendto_result < 0) {
+    if (sendto_result <= 0) {
         FatalErrorErrno("sendto", errno);
     }
 
@@ -108,8 +109,13 @@ void ReceivePacket(Context *ctx) {
     socklen_t addr_len = sizeof(recv_addr);
 
     ssize_t received = recvfrom(ctx->icmp_socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&recv_addr, &addr_len);
-
     if (received <= 0) {
+        Dbg("Recv %ld\n", received);
+        return;
+    }
+
+    if (addr_len != sizeof(struct sockaddr_in)) {
+        Dbg("Bad addr len(%u)\n", addr_len);
         return;
     }
 
@@ -131,16 +137,31 @@ void ReceivePacket(Context *ctx) {
     }
 
     int recv_port = ntohs(original_udp->uh_dport);
+
+    Dbg("TTL:%d\n", original_ip->ttl);
+    Dbg("Check:%u\n", original_ip->check);
+    Dbg("Port:%u\n", recv_port);
+
     int recv_query = recv_port - ctx->port;
     int recv_index = recv_query - ctx->first_query_this_loop;
     if (recv_index < 0 || recv_index >= ctx->queries_sent_this_loop) {
         return;
     }
 
-    ctx->probe_infos[recv_query].icmp_type = icmp->type;
-    ctx->probe_infos[recv_query].received = true;
-    ctx->probe_infos[recv_query].recv_addr = recv_addr;
-    ctx->probe_infos[recv_query].recv_time = GetTime();
+    if (ctx->probe_infos[recv_query].received) {
+        if (ctx->probe_infos[recv_query].recv_addr.sin_addr.s_addr != recv_addr.sin_addr.s_addr) {
+            char *a = strdup(inet_ntoa(ctx->probe_infos[recv_query].recv_addr.sin_addr));
+            char *b = strdup(inet_ntoa(recv_addr.sin_addr));
+            Dbg("BADBAD %s != %s\n", a, b);
+        }
+
+        Dbg("Already received\n");
+    } else {
+        ctx->probe_infos[recv_query].icmp_type = icmp->type;
+        ctx->probe_infos[recv_query].received = true;
+        ctx->probe_infos[recv_query].recv_addr = recv_addr;
+        ctx->probe_infos[recv_query].recv_time = GetTime();
+    }
 
     int hop = ctx->first_ttl + recv_query / ctx->num_queries_per_hop;
 

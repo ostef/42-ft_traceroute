@@ -6,7 +6,7 @@ OBJ_FILES=$(SRC_FILES:.c=.o)
 INCLUDE_DIRS=Source
 
 CC=gcc
-C_FLAGS=$(addprefix -I, $(INCLUDE_DIRS)) -Wall -Wextra -Werror
+C_FLAGS=$(addprefix -I, $(INCLUDE_DIRS)) #-Wall -Wextra -Werror
 
 all: $(NAME)
 
