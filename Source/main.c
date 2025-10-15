@@ -51,7 +51,7 @@ static void PrintUsage() {
     fprintf(stderr, "  --help\t\t\tShow this help message\n");
     fprintf(stderr, "  -f <first_ttl>\t\tStart from the <first_ttl> hop (default is 1)\n");
     fprintf(stderr, "  -m <max_ttl>\t\t\tSet the maximum ttl (default is 30)\n");
-    fprintf(stderr, "  -N <sim_queries>\t\tSet the number of simultaneous probes sent (default is 16)\n");
+    // fprintf(stderr, "  -N <sim_queries>\t\tSet the number of simultaneous probes sent (default is 16)\n");
     fprintf(stderr, "  -q <num_probes>\t\tSet the number of probes to send per hop (default is 3)\n");
     fprintf(stderr, "  -w <max_wait>\t\t\tWait at most <max_wait> seconds for all pending packets to receive (default is 1 second)\n");
 }
@@ -93,12 +93,12 @@ static void HandleProgramArguments(Context *ctx, int argc, char **argv) {
                 FatalError("Invalid value for -m option (expected an integer >1)");
             }
         } break;
-        case 'N': {
-            ctx->num_simultaneous_queries = ParseInt(argv[i]);
-            if (ctx->num_simultaneous_queries < 1) {
-                FatalError("Invalid value for -N option (expected an integer >1)");
-            }
-        } break;
+        // case 'N': {
+        //     ctx->num_simultaneous_queries = ParseInt(argv[i]);
+        //     if (ctx->num_simultaneous_queries < 1) {
+        //         FatalError("Invalid value for -N option (expected an integer >1)");
+        //     }
+        // } break;
         case 'q': {
             ctx->num_queries_per_hop = ParseInt(argv[i]);
             if (ctx->num_queries_per_hop < 1) {
@@ -119,7 +119,7 @@ static void HandleProgramArguments(Context *ctx, int argc, char **argv) {
             }
         } break;
         default: {
-            FatalError("Unknown option '%c'", option);
+            FatalError("Unknown option '-%c'", option);
         } break;
         }
 
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
     Context ctx = {0};
     ctx.first_ttl = 1;
     ctx.max_ttl = 30;
-    ctx.num_simultaneous_queries = 16;
+    ctx.num_simultaneous_queries = 1; // @Fix: on school computers setting this to more than 1 breaks everything... 16;
     ctx.num_queries_per_hop = 3;
     ctx.port = 33434;
     ctx.max_wait_in_seconds = 1;
